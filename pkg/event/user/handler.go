@@ -39,7 +39,7 @@ func (u *userEventhandler) InsertUser(ctx context.Context, user *upb.User) error
 		return err
 	}
 	row := u.pgx.QueryRow(context.Background(), query, args...)
-	if err := row.Scan(user.GetId); err != nil {
+	if err := row.Scan(user.GetId()); err != nil {
 		u.logger.Error().Err(err).Msg("failed to insert user")
 		return err
 	}
