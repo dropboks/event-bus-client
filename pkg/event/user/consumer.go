@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/rs/zerolog"
+	"github.com/spf13/viper"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -24,10 +25,29 @@ type (
 	}
 )
 
-func NewUserEventConsumer(pgx *pgxpool.Pool, jsConsumer jetstream.Consumer, logger zerolog.Logger) UserEventConsumer {
+func NewUserEventConsumer(pgx *pgxpool.Pool, js jetstream.JetStream, streamCfg jetstream.ConsumerConfig, logger zerolog.Logger) UserEventConsumer {
+	cfg := &jetstream.StreamConfig{
+		Name:        viper.GetString("jetstream.event.stream.name"),
+		Description: viper.GetString("jetstream.event.stream.description"),
+		Subjects:    []string{viper.GetString("jetstream.event.subject.global")},
+		MaxBytes:    6 * 1024 * 1024,
+		Storage:     jetstream.FileStorage,
+	}
+	_, err := js.CreateOrUpdateStream(context.Background(), *cfg)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create or update JetStream Event Bus stream")
+	}
+	ctx := context.Background()
+	// create based on config passed
+	con, err := js.CreateOrUpdateConsumer(ctx, viper.GetString("jetstream.event.stream.name"), streamCfg)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create or update consumer")
+		return nil
+	}
+
 	return &userEventConsumer{
 		pgx:        pgx,
-		jsConsumer: jsConsumer,
+		jsConsumer: con,
 		logger:     logger,
 	}
 }
