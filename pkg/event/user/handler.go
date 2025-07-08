@@ -2,7 +2,6 @@ package event
 
 import (
 	"context"
-	"fmt"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/dropboks/proto-user/pkg/upb"
@@ -29,7 +28,7 @@ func NewUserEventConsumerHandler(pgx *pgxpool.Pool, logger zerolog.Logger) UserE
 }
 
 func (u *userEventhandler) InsertUser(ctx context.Context, user *upb.User) error {
-	fmt.Println(user)
+
 	query, args, err := sq.Insert("users").
 		Columns("id", "full_name", "image", "email", "password", "verified", "two_factor_enabled").
 		Values(user.GetId(), user.GetFullName(), user.GetImage(), user.GetEmail(), user.GetPassword(), user.GetVerified(), user.GetTwoFactorEnabled()).
@@ -41,7 +40,8 @@ func (u *userEventhandler) InsertUser(ctx context.Context, user *upb.User) error
 		return err
 	}
 	row := u.pgx.QueryRow(context.Background(), query, args...)
-	if err := row.Scan(user.GetId()); err != nil {
+	var id string
+	if err := row.Scan(&id); err != nil {
 		u.logger.Error().Err(err).Msg("failed to insert user")
 		return err
 	}
