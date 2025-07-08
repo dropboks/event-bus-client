@@ -13,36 +13,31 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// recieve instance pgx cause we won't accept custom function and will
-// just update the database cause we don't want other behaviour since
-// the utility of these event just to sync data across databases
-
 type (
-	EventConsumer interface {
+	UserEventConsumer interface {
 		StartConsume()
 	}
-	eventConsumer struct {
+	userEventConsumer struct {
 		pgx        *pgxpool.Pool
 		jsConsumer jetstream.Consumer
 		logger     zerolog.Logger
 	}
 )
 
-func NewEventConsumer(pgx *pgxpool.Pool, jsConsumer jetstream.Consumer, logger zerolog.Logger) EventConsumer {
-	return &eventConsumer{
+func NewUserEventConsumer(pgx *pgxpool.Pool, jsConsumer jetstream.Consumer, logger zerolog.Logger) UserEventConsumer {
+	return &userEventConsumer{
 		pgx:        pgx,
 		jsConsumer: jsConsumer,
 		logger:     logger,
 	}
 }
 
-// run this function in goroutin from you entrypoint app
-func (e *eventConsumer) StartConsume() {
-	handler := NewConsumerHandler(e.pgx, e.logger)
-	_, err := e.jsConsumer.Consume(func(msg jetstream.Msg) {
+func (u *userEventConsumer) StartConsume() {
+	handler := NewUserEventConsumerHandler(u.pgx, u.logger)
+	_, err := u.jsConsumer.Consume(func(msg jetstream.Msg) {
 		event := &epb.EventMessage{}
 		if err := proto.Unmarshal(msg.Data(), event); err != nil {
-			e.logger.Error().Err(err).Msg("failed to unmarshal event message")
+			u.logger.Error().Err(err).Msg("failed to unmarshal event message")
 			_ = msg.Nak()
 			return
 		}
@@ -51,7 +46,7 @@ func (e *eventConsumer) StartConsume() {
 		case *epb.EventMessage_UserEvent:
 			switch userEvt := evt.UserEvent.Event.(type) {
 			case *uepb.UserEvent_UserCreated:
-				e.logger.Info().Str("user_id", userEvt.UserCreated.GetId()).Msg("UserCreated event received")
+				u.logger.Info().Str("user_id", userEvt.UserCreated.GetId()).Msg("UserCreated event received")
 				um := userEvt.UserCreated
 				us := &upb.User{
 					Id:               um.GetId(),
@@ -66,12 +61,12 @@ func (e *eventConsumer) StartConsume() {
 				err := handler.InsertUser(context.Background(), us)
 
 				if err != nil {
-					e.logger.Error().Err(err).Msg("failed to insert user")
+					u.logger.Error().Err(err).Msg("failed to insert user")
 				}
 				msg.Ack()
 
 			case *uepb.UserEvent_UserUpdated:
-				e.logger.Info().Str("user_id", userEvt.UserUpdated.GetId()).Msg("UserUpdate event received")
+				u.logger.Info().Str("user_id", userEvt.UserUpdated.GetId()).Msg("UserUpdate event received")
 
 				um := userEvt.UserUpdated
 				us := &upb.User{
@@ -87,19 +82,19 @@ func (e *eventConsumer) StartConsume() {
 				handler.UpdateUser(context.Background(), us)
 
 				if err := msg.Ack(); err != nil {
-					e.logger.Error().Err(err).Msg("failed to ack UserUpdated event")
+					u.logger.Error().Err(err).Msg("failed to ack UserUpdated event")
 				}
 
 			default:
-				e.logger.Warn().Msg("unknown user event type")
+				u.logger.Warn().Msg("unknown user event type")
 				_ = msg.Nak()
 			}
 		default:
-			e.logger.Warn().Msg("unknown event type")
+			u.logger.Warn().Msg("unknown event type")
 			_ = msg.Nak()
 		}
 	})
 	if err != nil {
-		e.logger.Fatal().Err(err).Msg("failed to consume event bus stream")
+		u.logger.Fatal().Err(err).Msg("failed to consume event bus stream")
 	}
 }

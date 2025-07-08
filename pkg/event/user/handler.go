@@ -10,24 +10,24 @@ import (
 )
 
 type (
-	Handler interface {
+	UserEventHandler interface {
 		InsertUser(ctx context.Context, user *upb.User) error
 		UpdateUser(ctx context.Context, user *upb.User) error
 	}
-	handler struct {
+	userEventhandler struct {
 		pgx    *pgxpool.Pool
 		logger zerolog.Logger
 	}
 )
 
-func NewConsumerHandler(pgx *pgxpool.Pool, logger zerolog.Logger) Handler {
-	return &handler{
+func NewUserEventConsumerHandler(pgx *pgxpool.Pool, logger zerolog.Logger) UserEventHandler {
+	return &userEventhandler{
 		pgx:    pgx,
 		logger: logger,
 	}
 }
 
-func (h *handler) InsertUser(ctx context.Context, user *upb.User) error {
+func (u *userEventhandler) InsertUser(ctx context.Context, user *upb.User) error {
 	query, args, err := sq.Insert("users").
 		Columns("id", "full_name", "image", "email", "password", "verified", "two_factor_enabled").
 		Values(user.GetId(), user.GetFullName(), user.GetImage(), user.GetEmail(), user.GetPassword(), user.GetVerified(), user.GetTwoFactorEnabled()).
@@ -35,18 +35,18 @@ func (h *handler) InsertUser(ctx context.Context, user *upb.User) error {
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
 	if err != nil {
-		h.logger.Error().Err(err).Msg("failed to build insert query")
+		u.logger.Error().Err(err).Msg("failed to build insert query")
 		return err
 	}
-	row := h.pgx.QueryRow(context.Background(), query, args...)
+	row := u.pgx.QueryRow(context.Background(), query, args...)
 	if err := row.Scan(user.GetId); err != nil {
-		h.logger.Error().Err(err).Msg("failed to insert user")
+		u.logger.Error().Err(err).Msg("failed to insert user")
 		return err
 	}
 	return nil
 }
 
-func (h *handler) UpdateUser(ctx context.Context, user *upb.User) error {
+func (u *userEventhandler) UpdateUser(ctx context.Context, user *upb.User) error {
 	query, args, err := sq.Update("users").
 		Set("full_name", user.FullName).
 		Set("image", user.Image).
@@ -59,17 +59,17 @@ func (h *handler) UpdateUser(ctx context.Context, user *upb.User) error {
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
 	if err != nil {
-		h.logger.Error().Err(err).Msg("failed to build update query")
+		u.logger.Error().Err(err).Msg("failed to build update query")
 		return err
 	}
 
-	cmdTag, err := h.pgx.Exec(ctx, query, args...)
+	cmdTag, err := u.pgx.Exec(ctx, query, args...)
 	if err != nil {
-		h.logger.Error().Err(err).Msg("failed to update user")
+		u.logger.Error().Err(err).Msg("failed to update user")
 		return err
 	}
 	if cmdTag.RowsAffected() == 0 {
-		h.logger.Warn().Str("id", user.GetId()).Msg("user not found for update")
+		u.logger.Warn().Str("id", user.GetId()).Msg("user not found for update")
 		return err
 	}
 	return nil
