@@ -26,8 +26,8 @@ type (
 	}
 )
 
-func NewEmitter(js jetstream.JetStream, subject string, logger zerolog.Logger) Emitter {
-	
+func NewEmitter(js jetstream.JetStream, logger zerolog.Logger) Emitter {
+
 	cfg := &jetstream.StreamConfig{
 		Name:        viper.GetString("jetstream.event.stream.name"),
 		Description: viper.GetString("jetstream.event.stream.description"),
@@ -39,7 +39,7 @@ func NewEmitter(js jetstream.JetStream, subject string, logger zerolog.Logger) E
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Failed to create or update JetStream Event Bus stream")
 	}
-
+	subject := viper.GetString("jetstream.event.subject.event_bus")
 	return &emitter{js: js, subject: subject, logger: logger}
 }
 
